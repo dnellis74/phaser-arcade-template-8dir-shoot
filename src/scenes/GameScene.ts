@@ -36,7 +36,8 @@ export class GameScene extends Phaser.Scene {
   private gameOverTransitioned = false; // Track if we've already triggered the transition back to SplashScene
   private delayedCalls: Phaser.Time.TimerEvent[] = []; // Store delayed calls for cleanup
   // Playfield bounds (in world space, square based on min dimension)
-  private playfieldSize!: number;
+  private playfieldSize: number = 0;
+  private playfieldOrigin = { x: 0, y: 0 };
   public uiCamera!: Phaser.Cameras.Scene2D.Camera; // Public for MobileControls access
 
   constructor() {
@@ -58,6 +59,13 @@ export class GameScene extends Phaser.Scene {
     // Check if device is mobile (has touch support)
     this.isMobile = this.sys.game.device.input.touch;
 
+    // Listen for browser/phone resize FIRST, then set up camera
+    // Use Phaser.Scale.Events.RESIZE for proper event handling
+    this.scale.on(Phaser.Scale.Events.RESIZE, this.setupCamera, this);
+    
+    // Set up camera and viewport after listener is set
+    this.setupCamera();
+
     // Set up input controls
     if (this.isMobile) {
       // Create virtual joystick for mobile
@@ -74,22 +82,12 @@ export class GameScene extends Phaser.Scene {
     }
 
     const { width, height } = this.scale;
+    
+    // Visual test: Draw a border around our square playfield (in world coordinates)
+    this.add.graphics()
+      .lineStyle(2, 0x00ff00)
+      .strokeRect(this.playfieldOrigin.x, this.playfieldOrigin.y, this.playfieldSize, this.playfieldSize);
 
-    // Calculate square playfield based on smallest dimension (90% of min dimension)
-    this.playfieldSize = Math.min(width, height) * 0.9;
-    
-    // Calculate offset to center the square on screen both horizontally and vertically
-    const offsetX = (width - this.playfieldSize) / 2;
-    const offsetY = (height - this.playfieldSize) / 2;
-
-    // Set up main camera viewport for square playfield
-    // This camera shows only the square playfield area, centered on screen
-    this.physics.world.setBounds(0, 0, this.playfieldSize, this.playfieldSize);
-    
-    // Set viewport to center the playfield both left-right and top-bottom
-    this.cameras.main.setViewport(offsetX, offsetY, this.playfieldSize, this.playfieldSize);
-    this.cameras.main.setBackgroundColor('#111111');
-    
     // Create tiled dungeon wall background covering the entire screen (in UI space)
     // This will show in the "dead space" around the playfield square
     const background = this.add.tileSprite(0, 0, width, height, 'dungeonWall')
@@ -104,10 +102,10 @@ export class GameScene extends Phaser.Scene {
     this.uiCamera.setScroll(0, 0);
     // UI camera will render on top by default (added after main camera)
 
-    // Create black background for the playfield (in world space, 0-0 to playfieldSize-playfieldSize)
+    // Create black background for the playfield (in world space, centered on playfield)
     this.add.rectangle(
-      this.playfieldSize / 2,
-      this.playfieldSize / 2,
+      this.playfieldOrigin.x + this.playfieldSize / 2,
+      this.playfieldOrigin.y + this.playfieldSize / 2,
       this.playfieldSize,
       this.playfieldSize,
       0x000000
@@ -117,9 +115,9 @@ export class GameScene extends Phaser.Scene {
     this.bulletManager = new BulletManager(this);
 
     // Create player as a triangle (arrow pointing up initially)
-    // Position player at center of playfield (in world space)
-    const playerX = this.playfieldSize / 2;
-    const playerY = this.playfieldSize / 2;
+    // Position player at center of playfield (in world space, using offset coordinates)
+    const playerX = this.playfieldOrigin.x + this.playfieldSize / 2;
+    const playerY = this.playfieldOrigin.y + this.playfieldSize / 2;
     this.player = this.add.triangle(
       playerX,
       playerY,
@@ -138,9 +136,9 @@ export class GameScene extends Phaser.Scene {
     // Ensure player is on main camera only (not UI camera)
     this.uiCamera.ignore(this.player);
 
-    // Create game over object - positioned within playfield (in world space)
-    const gameOverX = this.playfieldSize * 0.75;
-    const gameOverY = this.playfieldSize * 0.25;
+    // Create game over object - positioned within playfield (in world space, using offset coordinates)
+    const gameOverX = this.playfieldOrigin.x + this.playfieldSize * 0.75;
+    const gameOverY = this.playfieldOrigin.y + this.playfieldSize * 0.25;
     this.gameOverObject = this.add.ellipse(
       gameOverX,
       gameOverY,
@@ -185,10 +183,10 @@ export class GameScene extends Phaser.Scene {
     // Score text should be on UI camera only (not main camera)
     this.cameras.main.ignore(this.scoreText);
 
-    // Create game over text (initially hidden) - centered in playfield (in world space)
+    // Create game over text (initially hidden) - centered in playfield (in world space, using offset coordinates)
     this.gameOverText = this.add.text(
-      this.playfieldSize / 2,
-      this.playfieldSize / 2,
+      this.playfieldOrigin.x + this.playfieldSize / 2,
+      this.playfieldOrigin.y + this.playfieldSize / 2,
       "",
       {
         fontSize: Sizes.GAME_OVER_FONT,
@@ -202,6 +200,45 @@ export class GameScene extends Phaser.Scene {
     loadSounds(this);
   }
 
+  setupCamera() {
+    const { width, height } = this.scale.gameSize;
+
+    // 1. Calculate the square size (with a small 5% padding)
+    this.playfieldSize = Math.min(width, height) * 0.95;
+
+    // 2. Define the Game World (The Square) - center the world coordinates themselves
+    // We offset the world bounds to center them on screen
+    this.playfieldOrigin.x = (width - this.playfieldSize) / 2;
+    this.playfieldOrigin.y = (height - this.playfieldSize) / 2;
+
+    // 3. Set Physics Bounds to the centered square (using world coordinates with offset)
+    this.physics.world.setBounds(
+      this.playfieldOrigin.x, 
+      this.playfieldOrigin.y, 
+      this.playfieldSize, 
+      this.playfieldSize
+    );
+
+    // 4. Set camera bounds to match the centered world
+    this.cameras.main.setBounds(
+      this.playfieldOrigin.x, 
+      this.playfieldOrigin.y, 
+      this.playfieldSize, 
+      this.playfieldSize
+    );
+    
+    // 5. Keep the camera focused on the center of the playfield
+    const centerX = this.playfieldOrigin.x + this.playfieldSize / 2;
+    const centerY = this.playfieldOrigin.y + this.playfieldSize / 2;
+    this.cameras.main.centerOn(centerX, centerY);
+    
+    // 6. Reset scroll to ensure consistent positioning
+    this.cameras.main.setScroll(this.playfieldOrigin.x, this.playfieldOrigin.y);
+
+    // 7. Backgrounds
+    this.cameras.main.setBackgroundColor('#111'); // Inner square color
+  }
+  
   update() {
     if (this.isGameOver) {
       // Handle game over transition after delay
