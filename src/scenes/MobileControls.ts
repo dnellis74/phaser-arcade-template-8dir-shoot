@@ -10,6 +10,7 @@ export interface IGameScene extends Phaser.Scene {
   joystickCursors?: Phaser.Types.Input.Keyboard.CursorKeys;
   shootBullet(): void;
   uiCamera?: Phaser.Cameras.Scene2D.Camera;
+  uiObjectsGroup?: Phaser.GameObjects.Group; // For Cabinet Architecture
 }
 
 export class MobileControls {
@@ -55,10 +56,14 @@ export class MobileControls {
     );
     fireButton.setInteractive({ useHandCursor: true });
     fireButton.setDepth(GameConfig.UI_Z_DEPTH);
+    fireButton.setScrollFactor(0); // Sticks to screen
     
-    // Ensure fire button is on UI camera only (not main camera)
-    if (this.scene.cameras.main) {
-      this.scene.cameras.main.ignore(fireButton);
+    // Ensure fire button is visible on main camera
+    fireButton.setVisible(true);
+    
+    // In Cabinet Architecture: Add to uiObjectsGroup so game camera ignores it
+    if (this.scene.uiObjectsGroup) {
+      this.scene.uiObjectsGroup.add(fireButton);
     }
     
     fireButton.on('pointerdown', () => {
@@ -95,12 +100,15 @@ export class MobileControls {
       );
       base.setDepth(GameConfig.UI_Z_DEPTH);
       thumb.setDepth(GameConfig.UI_Z_DEPTH + 1);
+      base.setScrollFactor(0); // Sticks to screen
+      thumb.setScrollFactor(0); // Sticks to screen
       
-      // Ensure joystick is on UI camera only (not main camera)
-      if (this.scene.cameras.main) {
-        this.scene.cameras.main.ignore([base, thumb]);
-      }
+      // Ensure joystick components are visible on main camera
+      base.setVisible(true);
+      thumb.setVisible(true);
       
+      // Create joystick FIRST - this needs to work with main camera for input
+      // Do this BEFORE adding to group to avoid event handler conflicts
       this.scene.joystick = joystickPlugin.add(this.scene, {
         x: joystickX,
         y: joystickY,
@@ -109,6 +117,13 @@ export class MobileControls {
         thumb: thumb,
         dir: MobileControlsConfig.JOYSTICK_DIRECTION_MODE
       });
+      
+      // In Cabinet Architecture: Add to uiObjectsGroup so game camera ignores them
+      // Add AFTER joystick is created to avoid breaking plugin setup
+      if (this.scene.uiObjectsGroup) {
+        this.scene.uiObjectsGroup.add(base);
+        this.scene.uiObjectsGroup.add(thumb);
+      }
 
       // Create cursor keys from joystick - this allows joystick to work exactly like keyboard
       this.scene.joystickCursors = this.scene.joystick.createCursorKeys();

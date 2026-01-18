@@ -18,7 +18,7 @@ const config: Phaser.Types.Core.GameConfig = {
     }
   },
   scale: {
-    mode: Phaser.Scale.RESIZE, // Canvas fills the whole window
+    mode: Phaser.Scale.RESIZE, // Full screen for cabinet architecture
     autoCenter: Phaser.Scale.CENTER_BOTH,
     width: "100%",
     height: "100%"
