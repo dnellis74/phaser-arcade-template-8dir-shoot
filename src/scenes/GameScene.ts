@@ -161,10 +161,16 @@ export class GameScene extends Phaser.Scene {
 
     // 10. VISIBILITY RULES (The Magic)
     // ----------------------------------------------------
-    // Cabinet (Main) should NOT see Game Objects
-    this.cameras.main.ignore(this.gameObjectsGroup);
     
-    // Monitor (Game Camera) should NOT see UI/Wall
+    // A. The Cabinet (Main Camera)
+    // It should only see the Wall and the UI. 
+    // It must IGNORE the Player, the World, and the Bullets.
+    this.cameras.main.ignore(this.gameObjectsGroup);
+    this.cameras.main.ignore(this.bulletManager.getBullets()); // <--- CRITICAL ADDITION
+    
+    // B. The Monitor (Game Camera)
+    // It should only see the Game World.
+    // It must IGNORE the Cabinet Wall and the Score/Joystick.
     this.gameCamera.ignore(this.uiObjectsGroup);
 
     // 11. INITIAL LAYOUT & RESIZE HANDLER
